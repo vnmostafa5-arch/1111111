@@ -6,6 +6,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.entity.Display;
+import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.RedStoneWireBlock;
@@ -16,13 +17,11 @@ import java.util.Iterator;
 import java.util.Map;
 
 public class ExampleModClient implements ClientModInitializer {
-    // جدول لتخزين الكيانات النصية النشطة فوق كل بلوكة ريدستون لمنع التكرار والـ Lag
     private final Map<BlockPos, Display.TextDisplay> activeDisplays = new HashMap<>();
     private int tickCounter = 0;
 
     @Override
     public void onInitializeClient() {
-        // الحدث المتوافق تماماً مع مشروعك الحالي والذي نجح في البناء سابقاً
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             if (client.player == null || client.level == null) {
                 activeDisplays.clear();
@@ -30,13 +29,12 @@ public class ExampleModClient implements ClientModInitializer {
             }
 
             tickCounter++;
-            // الفحص والتحديث كل 5 حركات (Ticks) لحماية الأداء والـ FPS
             if (tickCounter % 5 == 0) {
                 BlockPos playerPos = client.player.blockPosition();
-                int radius = 8; // مسافة الفحص حول اللاعب (8 بلوكات في كل اتجاه)
+                int radius = 8; // مسافة الفحص حول اللاعب
                 Map<BlockPos, Integer> currentRedstone = new HashMap<>();
 
-                // 1. البحث عن بلوكات الريدستون القريبة وقراءة قوتها الحالية
+                // 1. البحث عن البلوكات
                 for (int x = -radius; x <= radius; x++) {
                     for (int y = -radius; y <= radius; y++) {
                         for (int z = -radius; z <= radius; z++) {
@@ -50,7 +48,7 @@ public class ExampleModClient implements ClientModInitializer {
                     }
                 }
 
-                // 2. تنظيف وإزالة الكيانات النصية للبلوكات التي اختفت، كُسرت أو ابتعد عنها اللاعب
+                // 2. تنظيف النصوص القديمة أو البعيدة
                 Iterator<Map.Entry<BlockPos, Display.TextDisplay>> iterator = activeDisplays.entrySet().iterator();
                 while (iterator.hasNext()) {
                     Map.Entry<BlockPos, Display.TextDisplay> entry = iterator.next();
@@ -58,34 +56,35 @@ public class ExampleModClient implements ClientModInitializer {
                     Display.TextDisplay display = entry.getValue();
 
                     if (!currentRedstone.containsKey(pos) || display.isRemoved()) {
-                        display.discard(); // حذف الكيان النصي من عالم اللعبة تماماً
+                        // إزالة الكيان من عالم العميل باستخدام الـ ID الخاص به
+                        client.level.removeEntity(display.getId(), Entity.RemovalReason.DISCARDED);
                         iterator.remove();
                     }
                 }
 
-                // 3. إنشاء نصوص جديدة أو تحديث أرقام الطاقة للكيانات الحالية
+                // 3. إنشاء أو تحديث النصوص
                 for (Map.Entry<BlockPos, Integer> entry : currentRedstone.entrySet()) {
                     BlockPos pos = entry.getKey();
                     int power = entry.getValue();
                     String textStr = String.valueOf(power);
 
                     if (activeDisplays.containsKey(pos)) {
-                        // إذا كان النص موجوداً بالفعل، نقوم بتحديث الرقم فقط لو تغيرت الطاقة
                         Display.TextDisplay display = activeDisplays.get(pos);
                         display.setText(Component.literal(textStr));
                     } else {
-                        // إنشاء كيان نصي 3D (TextDisplay) مدمج من كود ماينكرافت الأساسي (Mojang Mappings)
                         Display.TextDisplay display = new Display.TextDisplay(EntityType.TEXT_DISPLAY, client.level);
                         
-                        // تحديد موقع النص (في منتصف البلوكة ومرفوع قليلاً للأعلى فوق السلك)
-                        display.setPos(pos.getX() + 0.5, pos.getY() + 0.4, pos.getZ() + 0.5);
+                        // تحديد الموقع بدقة فوق سلك الريدستون
+                        display.setPos(pos.getX() + 0.5, pos.getY() + 0.3, pos.getZ() + 0.5);
                         display.setText(Component.literal(textStr));
+                        display.setBillboardConstraints(Display.BillboardConstraints.CENTER); // يلتف مع عين اللاعب
                         
-                        // الكود السحري: جعل النص يلتف ويواجه عين اللاعب تلقائياً من أي زاوية (Billboard)
-                        display.setBillboardConstraints(Display.BillboardConstraints.CENTER);
+                        // التعديل السحري: توليد ID فريد سالب لمنع التعارض مع السيرفر ولإجبار العميل على رندرتها
+                        int uniqueId = -(pos.getX() * 31 + pos.getY() * 17 + pos.getZ()) - 1000;
+                        display.setId(uniqueId);
                         
-                        // إدخال الكيان في عالم اللاعب ليقوم المحرك الافتراضي برسمه فوراً وبسلاسة
-                        client.level.addFreshEntity(display);
+                        // إدخال الكيان عبر الدالة المخصصة للـ ClientLevel
+                        client.level.addEntity(uniqueId, display);
                         activeDisplays.put(pos, display);
                     }
                 }
