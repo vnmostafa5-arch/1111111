@@ -2,9 +2,9 @@ package com.example.client;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
-import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.Style;
 import net.minecraft.world.entity.Display;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.level.block.Blocks;
@@ -64,18 +64,56 @@ public class ExampleModClient implements ClientModInitializer {
                 for (Map.Entry<BlockPos, Integer> entry : currentRedstone.entrySet()) {
                     BlockPos pos = entry.getKey();
                     int power = entry.getValue();
-                    String textStr = String.valueOf(power);
+
+                    // تحديد اللون حسب قوة الإشارة
+                    // 0-5: أحمر | 6-10: أصفر | 11-15: أخضر
+                    int color;
+                    if (power <= 5) {
+                        // أحمر يتدرج مع القوة
+                        int intensity = (int) (155 + (power / 5.0f) * 100);
+                        color = (intensity << 16); // RGB أحمر
+                    } else if (power <= 10) {
+                        // أصفر
+                        int t = (int) ((power - 6) / 4.0f * 255);
+                        color = (255 << 16) | (t << 8); // RGB أصفر
+                    } else {
+                        // أخضر يزداد كثافة
+                        int green = (int) (155 + ((power - 11) / 4.0f) * 100);
+                        color = (green << 8); // RGB أخضر
+                    }
+
+                    // تحديد حجم النص حسب القوة (0.4 للضعيف ← 0.8 للقوي)
+                    float scale = 0.4f + (power / 15.0f) * 0.4f;
+
+                    Component text = Component.literal(String.valueOf(power))
+                            .setStyle(Style.EMPTY.withColor(color).withBold(power >= 10));
 
                     if (activeDisplays.containsKey(pos)) {
                         Display.TextDisplay display = activeDisplays.get(pos);
-                        display.setText(Component.literal(textStr));
+                        display.setText(text);
+                        display.setTransformation(
+                            new com.mojang.math.Transformation(
+                                null,
+                                null,
+                                new org.joml.Vector3f(scale, scale, scale),
+                                null
+                            )
+                        );
                     } else {
                         Display.TextDisplay display = new Display.TextDisplay(EntityType.TEXT_DISPLAY, client.level);
 
-                        // النص يلصق على الريدستون مباشرة
-                        display.setPos(pos.getX() + 0.5, pos.getY() + 0.1, pos.getZ() + 0.5);
-                        display.setText(Component.literal(textStr));
+                        // النص على الريدستون مباشرة
+                        display.setPos(pos.getX() + 0.5, pos.getY() + 0.05, pos.getZ() + 0.5);
+                        display.setText(text);
                         display.setBillboardConstraints(Display.BillboardConstraints.CENTER);
+                        display.setTransformation(
+                            new com.mojang.math.Transformation(
+                                null,
+                                null,
+                                new org.joml.Vector3f(scale, scale, scale),
+                                null
+                            )
+                        );
 
                         int uniqueId = -(pos.getX() * 31 + pos.getY() * 17 + pos.getZ()) - 1000;
                         display.setId(uniqueId);
